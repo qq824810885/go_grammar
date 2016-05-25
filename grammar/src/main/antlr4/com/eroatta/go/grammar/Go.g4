@@ -1,20 +1,25 @@
 grammar Go;
 
-sourceFile : packageClause (importDecl)* (topLevelDecl ';')* ;
+sourceFile : packageClause (importDecl)* (topLevelDecl)* ;
 
 // package
-packageClause : 'package' identifier;
+packageClause : 'package' packageName ;
+packageName : identifier ;
 
 // imports
 importDecl : 'import' importSpec 
-	| 'import''(' (importSpec)* ')';
+	| 'import''(' (importSpec STMT_TERMINATOR?)* ')' 
+	;
 	
-importSpec : 
-	'.' importPath
+importSpec : '.' importPath
 	| '_' importPath
-	| identifier importPath
-	| importPath;
-importPath : '"' identifier '"';
+	| packageName importPath
+	| importPath 
+	;
+importPath : qualifiedIdent
+	| identifier 
+	;
+//importPath : stringLit ;
 
 // top level declarations
 topLevelDecl : declaration
@@ -27,17 +32,14 @@ declaration : constDecl
 	| varDecl
 	;
 
-// constants
+// constants declaration
 constDecl : 'const' constSpec
-	| 'const' '(' (constSpec)* ')';
-constSpec : identifierList ((type)? '=' identifierList)?; // TODO: cambiar por expressionList
-
-identifierList : identifier (',' identifier)*;
-//expressionList : expression (',' expression);
+	| 'const' '(' (constSpec STMT_TERMINATOR?)* ')' ;
+constSpec : identifierList ((type)? '=' expressionList)? ; 
 
 // type declaration
 typeDecl : 'type' typeSpec
-	| 'type' '(' (typeSpec ';')* ')'
+	| 'type' '(' (typeSpec STMT_TERMINATOR?)* ')'
 	;
 typeSpec : identifier type ;
 
@@ -81,15 +83,15 @@ typeLit : 'bool'
 
 // type literals
 arrayType : '[' arrayLength ']' elementType ;
-arrayLength : NUMBER ; // TODO: replace by expression
+arrayLength : expression ;
 elementType : type ;
 
-structType : 'struct' '{' (fieldDecl ';')* '}' ;
+structType : 'struct' '{' (fieldDecl STMT_TERMINATOR?)* '}' ;
 fieldDecl : identifierList type tag?
 	| anonymousField tag?
 	;
 anonymousField : '*'? typeName ;
-tag : STRING ; // TODO: replace by string_lit
+tag : stringLit ;
 
 pointerType : '*' type ; 
 
@@ -98,11 +100,11 @@ signature : parameters result? ;
 result : parameters
 	| type
 	;
-parameters : '(' parameterList? ')' ;
+parameters : '(' (parameterList ','?)? ')' ;
 parameterList : parameterDecl (',' parameterDecl)* ;
 parameterDecl : identifierList? '...'? type ;
 
-interfaceType : 'interface' '{' (methodSpec ';')* '}' ;
+interfaceType : 'interface' '{' (methodSpec STMT_TERMINATOR?)* '}' ;
 methodSpec : methodName signature
 	| interfaceTypeName
 	;
@@ -114,14 +116,14 @@ sliceType : '[' ']' elementType ;
 mapType : 'map' '[' keyType ']' elementType ;
 keyType : type ;
 
-channelType : 'chan' elementType
-	| 'chan' '<-' elementType
-	| '<-' 'chan' elementType
+channelType : 'chan' elementType #bidirectionalChannel
+	| 'chan' '<-' elementType #senderChannel
+	| '<-' 'chan' elementType #receiverChannel
 	;
 
 // variable declaration
 varDecl : 'var' varSpec
-	| 'var' '(' (varSpec ';')* ')'
+	| 'var' '(' (varSpec STMT_TERMINATOR?)* ')'
 	;
 varSpec : identifierList type ('=' expressionList)?
 	| identifierList '=' expressionList
@@ -135,10 +137,11 @@ functionName : identifier ;
 function : signature functionBody ;
 functionBody : block ;
 block : '{' statementList '}' ;
-statementList : (statement ';')* ;
 
-functionLit : 'func' function ; //anonymous functions (closures)
+functionLit : 'func' function #closure
+	;
 
+statementList : (statement STMT_TERMINATOR?)* ;
 statement : declaration 
 	| labeledStmt 
 	| simpleStmt 
@@ -184,7 +187,7 @@ exprSwitchCase : 'case' expressionList
 	;
 
 typeSwitchStmt : 'switch' (simpleStmt ';')? typeSwitchGuard '{' (typeCaseClause)* '}' ;
-typeSwitchGuard : (identifier ':=')? primaryExpr '.(type)' ;
+typeSwitchGuard : (identifier ':=')? primaryExpr '.' '(' 'type' ')' ;
 typeCaseClause : 'case' typeList
 	| 'default'
 	;
@@ -202,7 +205,6 @@ forStmt : 'for' condition block
 	| 'for' forClause block
 	| 'for' rangeClause block
 	;
-
 condition : expression ;
 
 forClause : initStmt? ';' condition? ';' postStmt ;
@@ -221,15 +223,15 @@ simpleStmt : emptyStmt
 	| shortVarDecl
 	;
 
-emptyStmt : '' ; // TODO: review
+emptyStmt : '' ;
 
 expressionStmt : expression ;
 
-sendStmt : channel '<-' expression;
-channel : expression ; // TODO: review
+sendStmt : channel '<-' expression ;
+channel : expression ;
 
-incDecStmt : expression '++'
-	| expression '--'
+incDecStmt : expression '++' #incStmt
+	| expression '--' #decStmt
 	;
 	
 assignment : expressionList assignOp expressionList ;
@@ -277,30 +279,52 @@ basicLit : intLit
 	| floatLit
 	| imaginaryLit
 	//| runeLit TODO: complex!
-	//| stringLit
+	| stringLit
 	;
-intLit : decimalLit
-	| octalLit
-	| hexLit
+intLit : DECIMAL_LIT
+	| OCTAL_LIT
+	| HEX_LIT
 	;
-decimalLit : NUMBER ;// TODO: review
-octalLit : '0' (OCTAL_DIGIT)* ;
-hexLit : '0' ('x' | 'X') (HEX_DIGIT)+ ;
-
-DECIMAL_DIGIT : [0-9] ;
-OCTAL_DIGIT : [0-7] ;
-HEX_DIGIT : [0-9] | [A-F] | [a-f] ;
 
 floatLit : decimals '.' decimals? exponent?
 	| decimals exponent
 	| '.' decimals exponent?
 	;
-decimals : DECIMAL_DIGIT (DECIMAL_DIGIT)* ; //TODO: number?
+decimals : DECIMAL_DIGIT (DECIMAL_DIGIT)* ;
 exponent : ('e' | 'E') ('+' | '-')? decimals ;
 
 imaginaryLit : (decimals | floatLit) 'i' ;
 
-stringLit : STRING ;
+runeLit : '\'' unicodeValue '\''
+	| '\'' byteValue '\''
+	;
+unicodeValue : unicodeChar
+	| littleUValue
+	| bigUValue
+	| ESCAPED_CHAR
+	;
+byteValue : octalByValue
+	| hexByteValue
+	;
+octalByValue : '\\' OCTAL_DIGIT OCTAL_DIGIT OCTAL_DIGIT ;
+hexByteValue : '\\' 'x' HEX_DIGIT HEX_DIGIT ;
+littleUValue : '\\' 'u' HEX_DIGIT HEX_DIGIT HEX_DIGIT ;
+bigUValue : '\\' 'U' HEX_DIGIT HEX_DIGIT HEX_DIGIT
+	HEX_DIGIT HEX_DIGIT HEX_DIGIT ;
+ESCAPED_CHAR : '\\a'
+	| '\\b'
+	| '\\f'
+	| '\\n'
+	| '\\r'
+	| '\\t'
+	| '\\v'
+	| '\\/'
+	| '\\''\''
+	| '\\''\"'
+	;
+
+unicodeChar : stringLit ; // TODO
+stringLit : STRING ; //TODO: stringLit!
 
 compositeLit : literalType literalValue ;
 literalType : structType
@@ -335,11 +359,12 @@ receiverType : typeName
 conversion : type '(' expression ','? ')' ;
 
 // expressions
-expressionList : 'TODO' ;// TODO ;
+expressionList : expression (',' expression) ;
 
 expression : unaryExpr
 	| expression binaryOp expression
 	;
+	
 unaryExpr : primaryExpr
 	| unaryOp unaryExpr
 	;
@@ -357,11 +382,22 @@ mulOp : '*' | '/' | '%' | '<<' | '>>' | '&' | '&^' ;
 unaryOp : '+' | '-' | '!' | '^' | '*' | '&' | '<-' ;
 
 qualifiedIdent : packageName '.' identifier ;
-packageName : identifier ;
+identifierList : identifier (',' identifier)* ;
+identifier : stringLit ;
 
-identifier : STRING ;
+DECIMAL_LIT : [1-9] DECIMAL_DIGIT ;
+DECIMAL_DIGIT : [0-9] ;
 
-STRING : [a-z\/\._]+ ;
+OCTAL_LIT : '0' (OCTAL_DIGIT)* ;
+OCTAL_DIGIT : [0-7] ;
+
+HEX_LIT : '0' ('x' | 'X') (HEX_DIGIT)+ ;
+HEX_DIGIT : [0-9] | [A-F] | [a-f] ;
+
+STMT_TERMINATOR : ';' ;
+LINE_COMMENT : '//' .*? NEW_LINE -> channel(HIDDEN) ;
+STRING : [a-zA-Z\/_\"]+ ;
 NUMBER : [0-9]+ ;
 
-WS: (' ' | '\t\n\r')+ -> skip ;
+NEW_LINE : '\r'? '\n' -> channel(HIDDEN);
+WS: [ \t\n\r]+ -> channel(HIDDEN) ;

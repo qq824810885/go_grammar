@@ -8,7 +8,7 @@ public class GoPrinterListener extends GoBaseListener {
 
 	@Override
 	public void enterPackageClause(PackageClauseContext ctx) {
-		System.out.println("Package: " + ctx.identifier().getText());
+		System.out.println("Package: " + ctx.packageName().getText());
 	}
 
 	@Override
