@@ -6,6 +6,8 @@ import (
 
     _ "github.com/eroatta/lets_go/search_engine/matchers"
     "github.com/eroatta/lets_go/search_engine/search"
+    
+    mysql "mywebapp/libs/mysql/db"
 )
 
 // called prior to the main function

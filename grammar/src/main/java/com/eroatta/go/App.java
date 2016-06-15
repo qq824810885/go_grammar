@@ -33,7 +33,7 @@ public class App {
 		GoParser parser = new GoParser(tokens);
 
 		// begin parsing at the start rule
-		ParseTree tree = parser.sourceFile();
+		ParseTree tree = parser.compilationUnit();
 		System.out.println(tree.toStringTree(parser));
 		
 		// create a generic parse tree walker that can trigger callbacks
